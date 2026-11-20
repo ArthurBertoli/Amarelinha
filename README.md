@@ -81,4 +81,4 @@ Os arquivos de áudio `assets/snd_dumbvictory.wav` (som de acerto) e `assets/snd
 
 ## Autores
 
-Arthur Bertoli
+Arthur Bertoli e Monique

@@ -2,7 +2,11 @@ import cv2
 import mediapipe as mp
 import numpy as np
 
-from settings import *
+import settings
+
+# Os valores abaixo são lidos sempre de "settings." (e não copiados com
+# "from settings import *"), porque a resolução real da webcam só é conhecida
+# depois que a câmera abre e os pontos de calibração podem mudar durante o jogo.
 
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
@@ -13,33 +17,33 @@ def posicao(x: float, y: float, debug: bool = False) -> tuple[int, int]:
     # Função para determinar a posição do jogador na área de projeçao:
     # x, y são coordenadas normalizadas (0-1) do MediaPipe
     # Converte para coordenadas de pixel da webcam
-    p_webcam = (int(x * largura_webcam), int(y * altura_webcam))
+    p_webcam = (int(x * settings.largura_webcam), int(y * settings.altura_webcam))
 
     if debug:
         print(
-            f"DEBUG posicao: normalized ({x:.3f}, {y:.3f}) -> webcam pixel {p_webcam} (resolution: {largura_webcam}x{altura_webcam})"
+            f"DEBUG posicao: normalized ({x:.3f}, {y:.3f}) -> webcam pixel {p_webcam} (resolution: {settings.largura_webcam}x{settings.altura_webcam})"
         )
-        print(f"  Calibration points: {pontos_calibracao}")
+        print(f"  Calibration points: {settings.pontos_calibracao}")
 
     # Transformação de Perspectiva: da área calibrada para a área de projeção
     pts1 = np.float32(
         [
-            pontos_calibracao[0],
-            pontos_calibracao[1],
-            pontos_calibracao[2],
-            pontos_calibracao[3],
+            settings.pontos_calibracao[0],
+            settings.pontos_calibracao[1],
+            settings.pontos_calibracao[2],
+            settings.pontos_calibracao[3],
         ]
     )
     
     # Margens virtuais para compensar a distorção trapezoidal do projetor no chão
-    margemH: int = int(largura_projetor * 0.15)
+    margemH: int = int(settings.largura_projetor * 0.15)
     
     pts2 = np.float32(
         [
             [-margemH, -120],
-            [largura_projetor + margemH, -120],
-            [margemH, altura_projetor + 20],
-            [largura_projetor - margemH, altura_projetor + 20],
+            [settings.largura_projetor + margemH, -120],
+            [margemH, settings.altura_projetor + 20],
+            [settings.largura_projetor - margemH, settings.altura_projetor + 20],
         ]
     )
     matrix = cv2.getPerspectiveTransform(pts1, pts2)
@@ -62,20 +66,20 @@ def posicao(x: float, y: float, debug: bool = False) -> tuple[int, int]:
 
 def is_point_in_calibration_area(x: float, y: float) -> bool:
     # Verifica se o ponto (x, y em coordenadas normalizadas 0-1) está dentro da área de calibração
-    p_webcam = (int(x * largura_webcam), int(y * altura_webcam))
+    p_webcam = (int(x * settings.largura_webcam), int(y * settings.altura_webcam))
 
     # Usa cv2.pointPolygonTest para verificar se está dentro do polígono
     polygon = np.array(
         [
-            pontos_calibracao[0],
-            pontos_calibracao[1],
-            pontos_calibracao[3],
-            pontos_calibracao[2],
+            settings.pontos_calibracao[0],
+            settings.pontos_calibracao[1],
+            settings.pontos_calibracao[3],
+            settings.pontos_calibracao[2],
         ],
         np.int32,
     )
 
-    result = cv2.pointPolygonTest(polygon, p_webcam, False)
+    result = cv2.pointPolygonTest(polygon, (float(p_webcam[0]), float(p_webcam[1])), False)
     return result >= 0  # >= 0 significa dentro ou na borda
 
 
@@ -95,6 +99,7 @@ class PoseTracking:
         self.pose_detected: bool = False
         self.feet_in_calibration_area: bool = False
         self.debug_counter: int = 0
+        self.image: np.ndarray | None = None
 
     def scan_feets(self, image: np.ndarray | None) -> np.ndarray | None:
         # Adicione esta verificação de segurança no início da função
@@ -113,7 +118,7 @@ class PoseTracking:
         image.flags.writeable = True
         image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
 
-        self.feet_closed = False
+        self.pose_closed = False
 
         if self.results.pose_landmarks:
             self.pose_detected = True
@@ -154,6 +159,7 @@ class PoseTracking:
             self.pose_detected = False
             self.feet_in_calibration_area = False
 
+        self.image = image
         return image
 
     def get_feet_center(self) -> tuple[int | None, int | None]:
@@ -172,8 +178,9 @@ class PoseTracking:
         return (None, None)
 
     def display_feet(self) -> None:
-        cv2.imshow("image", self.image)
-        cv2.waitKey(1)
+        if self.image is not None:
+            cv2.imshow("image", self.image)
+            cv2.waitKey(1)
 
     def is_feet_closed(self) -> None:
         pass

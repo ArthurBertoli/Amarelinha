@@ -1,3 +1,6 @@
+# Para Python 3.11 ou 3.12. O código usa a API legada mp.solutions do MediaPipe,
+# que ainda existe na versão fixada abaixo (0.10.21); versões mais novas do
+# MediaPipe removeram mp.solutions, por isso a versão é fixa.
 absl-py==2.3.1
 attrs==25.4.0
 cffi==2.0.0

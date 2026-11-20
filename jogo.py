@@ -1,11 +1,42 @@
 import os
+from typing import Any
+
 import pygame
 from pygame.locals import QUIT, KEYDOWN, K_ESCAPE, K_c, K_d
 
 from pose_tracking import PoseTracking
+import settings
 from settings import path_assets, tamanho_tela, fps, resource_path
 import calibrate
 from camera import Camera
+
+
+def carregar_som(nome: str, volume: float | None = None) -> "pygame.mixer.Sound | None":
+    """Carrega um som de assets/ se possível.
+
+    Os arquivos .wav originais não fazem parte do repositório (direitos
+    autorais) e o mixer pode falhar em máquinas sem saída de áudio. Nesses
+    casos o jogo continua normalmente, só que sem som.
+    """
+    caminho = os.path.join(path_assets, nome)
+    if not os.path.isfile(caminho):
+        print(f"Som '{nome}' não encontrado em assets/; o jogo segue sem esse som.")
+        return None
+    try:
+        if not pygame.mixer.get_init():
+            pygame.mixer.init()
+        som = pygame.mixer.Sound(caminho)
+        if volume is not None:
+            som.set_volume(volume)
+        return som
+    except pygame.error as erro:
+        print(f"Não foi possível carregar o som '{nome}' ({erro}); o jogo segue sem som.")
+        return None
+
+
+def tocar(som: "pygame.mixer.Sound | None") -> None:
+    if som is not None:
+        som.play()
 
 
 class Jogo:
@@ -33,11 +64,7 @@ class Jogo:
         self.feedback: str | None = None
         self.debug: bool = False
 
-        self.superficie: pygame.Surface = pygame.display.set_mode(
-            size=self.tamanho, flags=pygame.FULLSCREEN, display=0
-        )
-
-        pygame.display.set_caption("Amarelinha Gen")
+        self.superficie: pygame.Surface = self.criarJanela()
         self.origin: tuple[int, int, int] = (0, 0, 0)
         self.fonte: pygame.font.Font = pygame.font.SysFont("aakar", 35)
         self.fonteNumero: pygame.font.Font = pygame.font.SysFont("aakar", 40)
@@ -45,9 +72,9 @@ class Jogo:
         self.menuBackgroundAsset: pygame.Surface = pygame.image.load(resource_path(os.path.join(path_assets, "tela-inicial.png")))
         self.startButtonAsset: pygame.Surface = pygame.image.load(resource_path(os.path.join(path_assets, "iniciar.png")))
 
-        self.somCerto: pygame.mixer.Sound = pygame.mixer.Sound(os.path.join(path_assets, "snd_dumbvictory.wav"))
-        self.somCerto.set_volume(0.2)
-        self.somErrado: pygame.mixer.Sound = pygame.mixer.Sound(os.path.join(path_assets, "snd_hurt1.wav"))
+        # Sons opcionais: se o arquivo não existir ou o mixer falhar, o jogo segue sem som
+        self.somCerto = carregar_som("snd_dumbvictory.wav", 0.2)
+        self.somErrado = carregar_som("snd_hurt1.wav")
 
         btnW: int = self.startButtonAsset.get_width()
         btnH: int = self.startButtonAsset.get_height()
@@ -61,10 +88,26 @@ class Jogo:
 
         self.squares: dict[int, pygame.Rect] = self.gerarSquares()
 
-        self.estadoEsq: dict[str, any] = {"quadrado": 0, "confirmado": False}
-        self.estadoDir: dict[str, any] = {"quadrado": 0, "confirmado": False}
+        self.estadoEsq: dict[str, Any] = {"quadrado": 0, "confirmado": False}
+        self.estadoDir: dict[str, Any] = {"quadrado": 0, "confirmado": False}
 
         self.historico: list[str] = []
+
+    def criarJanela(self) -> pygame.Surface:
+        superficie = pygame.display.set_mode(
+            size=self.tamanho, flags=pygame.FULLSCREEN, display=0
+        )
+        pygame.display.set_caption("Amarelinha Gen")
+        return superficie
+
+    def calibrar(self) -> None:
+        """Abre a calibração usando a mesma câmera do jogo e aplica o resultado."""
+        pontos = calibrate.calibrar_ttea(self.cap.cap)
+        if pontos is not None:
+            # Atualiza no lugar: camera.py e pose_tracking.py leem settings.pontos_calibracao
+            settings.pontos_calibracao[:] = pontos
+        # A calibração troca o modo de vídeo; volta para a janela do jogo
+        self.superficie = self.criarJanela()
 
     def gerarSquares(self) -> dict[int, pygame.Rect]:
         """Calcula a posição dos 7 quadrados seguindo o layout pedido: 2, 1, 2, 1, 1."""
@@ -120,8 +163,7 @@ class Jogo:
                     if e.key == K_ESCAPE:
                         self.running = False
                     if e.key == K_c:
-                        self.cap.close_camera()
-                        calibrate.calibrar_ttea()
+                        self.calibrar()
                     if e.key == K_d:
                         self.debug = not self.debug
 
@@ -213,7 +255,7 @@ class Jogo:
         if not estado["confirmado"]:
             self.score += 10
             self.feedback = f"Acertou o quadrado {quadradoAtual}!"
-            self.somCerto.play()
+            tocar(self.somCerto)
             estado["confirmado"] = True
             self.historico.append(f"{nomePe} confirmou quadrado {quadradoAtual}")
             if len(self.historico) > 5:
@@ -246,6 +288,9 @@ class Jogo:
     def finish(self) -> None:
         pass
 
+    def close(self) -> None:
+        self.cap.close_camera()
+
 
 if __name__ == "__main__":
     g = Jogo()
@@ -253,4 +298,5 @@ if __name__ == "__main__":
         g.menu()
         g.run()
         g.finish()
+    g.close()
     pygame.quit()

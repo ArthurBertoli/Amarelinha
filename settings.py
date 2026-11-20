@@ -20,8 +20,9 @@ def resource_path(relative_path):
         # PyInstaller cria uma pasta temp e armazena o caminho em _MEIPASS
         base_path = sys._MEIPASS # type: ignore
     except Exception:
-        # Se não estiver rodando via PyInstaller, use o caminho normal
-        base_path = os.path.abspath(".")
+        # Se não estiver rodando via PyInstaller, usa a pasta do projeto
+        # (e não a pasta atual), para funcionar mesmo rodando de outro diretório
+        base_path = os.path.dirname(os.path.abspath(__file__))
 
     return os.path.join(base_path, relative_path)
 
@@ -31,7 +32,16 @@ fps = 60
 # Variáveis do Pygame
 WINDOW_NAME = "Kairos"
 GAME_TITLE = WINDOW_NAME
-CAMERA = 0
+# Índice da câmera (cv2.VideoCapture). Pode ser sobrescrito pela variável de
+# ambiente AMARELINHA_CAMERA (ex.: AMARELINHA_CAMERA=0). Se a câmera escolhida
+# não abrir, camera.abrir_camera() tenta automaticamente os índices de
+# CAMERA_FALLBACK.
+CAMERA = 2
+try:
+    CAMERA = int(os.environ.get("AMARELINHA_CAMERA", CAMERA))
+except ValueError:
+    print("AMARELINHA_CAMERA inválida; usando o índice padrão", CAMERA)
+CAMERA_FALLBACK = (0, 1, 2)
 CAMERA_FLIP = 0
 SCREEN_WIDTH, SCREEN_HEIGHT = 800, 600
 
